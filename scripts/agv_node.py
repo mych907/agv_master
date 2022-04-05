@@ -25,6 +25,7 @@ from visualization_msgs.msg import Marker
 from zed_interfaces.msg import Object
 from darknet_ros_msgs.msg import BoundingBoxes
 
+
 pub_map = rospy.Publisher('/map', OccupancyGrid, latch=True, queue_size=10)
 pub_flag = rospy.Publisher('/flag', Bool, latch=True, queue_size=10)
 pub_ego_pose = rospy.Publisher('/ego_pose', Float32MultiArray, latch=True, queue_size=10)
@@ -284,7 +285,6 @@ def simple_update_pos(pos):
 
 
 def callback_update_pos(pos):
-    global x, y
     global x1, y1
     global x2, y2
     global pos_offset
@@ -298,8 +298,8 @@ def callback_update_pos(pos):
         x2 = pos.x_m
         y2 = pos.y_m
 
-    x = (x1+x2)/2 + 0.36 * np.cos(np.deg2rad(yaw))# - pos_offset[0] + 0.34
-    y = (y1+y2)/2 + 0.36 * np.sin(np.deg2rad(yaw))# - pos_offset[1] + 1.8
+    AGV.x = (x1+x2)/2 + 0.36 * np.cos(np.deg2rad(yaw))# - pos_offset[0] + 0.34
+    AGV.y = (y1+y2)/2 + 0.36 * np.sin(np.deg2rad(yaw))# - pos_offset[1] + 1.8
 
 
 def simple_update_yaw(rpy):
@@ -414,6 +414,13 @@ def callback_tracker():
     alpha = np.arctan(p_y / p_x) - yaw_
     steering_angle = np.arctan(2 * L * np.sin(alpha) / ld)
     steer_mapped = (steering_angle*180/np.pi + 2.2)/23
+
+
+class AGV:
+    def __init__(self, x, y, yaw):
+        self.x = x
+        self.y = y
+        self.yaw = yaw
 
 
 if __name__ == '__main__':
