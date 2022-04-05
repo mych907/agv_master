@@ -9,6 +9,8 @@ Panels:
         - /Map1
         - /PointCloud1
         - /PointCloud1/Status1
+        - /Marker1
+        - /Marker1/Status1
       Splitter Ratio: 0.5
     Tree Height: 1088
   - Class: rviz/Selection
@@ -93,6 +95,14 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: visualization_marker
+      Name: Marker
+      Namespaces:
+        "": true
+      Queue Size: 10
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -130,7 +140,7 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 203.6162109375
+      Scale: 195.50485229492188
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz)
       X: 2.962470531463623

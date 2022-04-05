@@ -21,6 +21,7 @@ from zed_interfaces.msg import ObjectsStamped
 from std_msgs.msg import Header
 from sensor_msgs.msg import Imu
 from sensor_msgs.msg import PointCloud
+from visualization_msgs.msg import Marker
 from zed_interfaces.msg import Object
 from darknet_ros_msgs.msg import BoundingBoxes
 
@@ -35,6 +36,8 @@ pub_steer_mapped = rospy.Publisher('/steer_mapped', Float32, latch=True, queue_s
 pub_desired_path = rospy.Publisher('desired_path', Float32MultiArray, latch=True, queue_size=10)
 pub_imu_vel = rospy.Publisher('/ego_vel', Float32MultiArray, latch=True, queue_size=10)
 pub_path_points = rospy.Publisher('/visual', PointCloud, latch=True, queue_size=10)
+
+pub_marker = rospy.Publisher('/visualization_marker', Marker, latch=True, queue_size=10)
 
 
 #
@@ -65,9 +68,14 @@ yaw_offset = np.zeros((1,2))
 imu_velx = 0
 imu_vely = 0
 
+goalx_global = 5
+goaly_global = 1.8
+
 steering_angle = 0
 steer_mapped = 0
 path_data = np.zeros((2, 166))
+
+marker_ = 0
 
 
 def initialize_map():
@@ -149,6 +157,9 @@ def talker():
     msg.header.frame_id = "map"
     pub_path_points.publish(msg)
 
+    msg = marker_
+    pub_marker.publish(msg)
+
 
 def listener():
     rate = rospy.Rate(20)
@@ -187,6 +198,8 @@ def listener():
             for j in range(int(y / res) - 9, int(y / res) + 9):
                 np_map[j, i] = 50
 
+        show_marker()
+
         # person pos
         if person_detected == 1:
             np_map = occupancy_function(person_x, person_y)
@@ -205,6 +218,31 @@ def listener():
 
         talker()
         rate.sleep()
+
+
+def show_marker():
+    global marker_, goalx_global, goaly_global
+    marker_ = Marker()
+    marker_.header.frame_id = "/map"
+    marker_.type = marker_.CUBE
+    marker_.action = marker_.ADD
+
+    marker_.pose.position.x = goalx_global
+    marker_.pose.position.y = goaly_global
+    marker_.pose.position.z = 0
+    marker_.pose.orientation.x = 0
+    marker_.pose.orientation.y = 0
+    marker_.pose.orientation.z = 0
+    marker_.pose.orientation.w = 0
+
+    marker_.scale.x = 0.2
+    marker_.scale.y = 0.2
+    marker_.scale.z = 0.2
+    marker_.color.a = 0.5
+    red_ = 255
+    marker_.color.r = red_
+
+    return marker_
 
 
 def initialize_pos():
@@ -323,10 +361,11 @@ def a_star(ego_x_abs, ego_y_abs):
     global res
     global np_map
     global path
+    global goalx_global, goaly_global
 
     res_ = 1 / res
-    goalx = 5 * res_
-    goaly = 1.8 * res_
+    goalx = goalx_global * res_
+    goaly = goaly_global * res_
     min_i = 0
     min_j = 0
     ego_x = int(round(ego_x_abs * res_))
