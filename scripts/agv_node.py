@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-# import necessary libraries
-
 import rospy
 import time
 import sys
@@ -25,211 +23,271 @@ from visualization_msgs.msg import Marker
 from zed_interfaces.msg import Object
 from darknet_ros_msgs.msg import BoundingBoxes
 
+from library_agv import AGV, Person, Map
 
 pub_map = rospy.Publisher('/map', OccupancyGrid, latch=True, queue_size=10)
-pub_flag = rospy.Publisher('/flag', Bool, latch=True, queue_size=10)
 pub_ego_pose = rospy.Publisher('/ego_pose', Float32MultiArray, latch=True, queue_size=10)
 pub_ego_yaw = rospy.Publisher('/ego_yaw', Float32, latch=True, queue_size=10)
 pub_person_pose = rospy.Publisher('/person_pose', Float32MultiArray, latch=True, queue_size=10)
 pub_path = rospy.Publisher('/path', Float32MultiArray, latch=True, queue_size=10)
 pub_steer = rospy.Publisher('/steering_angle', Float32, latch=True, queue_size=10)
-pub_steer_mapped = rospy.Publisher('/steer_mapped', Float32, latch=True, queue_size=10)
-pub_desired_path = rospy.Publisher('desired_path', Float32MultiArray, latch=True, queue_size=10)
-pub_imu_vel = rospy.Publisher('/ego_vel', Float32MultiArray, latch=True, queue_size=10)
 pub_path_points = rospy.Publisher('/visual', PointCloud, latch=True, queue_size=10)
-
 pub_marker = rospy.Publisher('/visualization_marker', Marker, latch=True, queue_size=10)
-
-
-#
-res = 0.01
-person_x = 2.2
-person_y = 1.37
-yaw = 0
-x = 0.03 + 0.36 * np.cos(np.deg2rad(yaw))
-y = 1.8 + 0.36 * np.sin(np.deg2rad(yaw))
-x1 = 0.04
-y1 = 1.7
-x2 = 0.04
-y2 = 1.9
-zed_x = 0.34
-zed_y = 1.8
-person_x_abs = 2
-person_y_abs = 1.7
-person_detected = 0
-test_map = OccupancyGrid()
-test_map_zero = 0
-np_map = np.zeros((360, 600))
-pos_offset = np.zeros((2, 2))
-path = np.zeros(166*2)
-p_x = 0
-p_y = 0
-yaw = 0
-yaw_offset = np.zeros((1,2))
-imu_velx = 0
-imu_vely = 0
-
-goalx_global = 5
-goaly_global = 1.8
-
-steering_angle = 0
-steer_mapped = 0
-path_data = np.zeros((2, 166))
-
-marker_ = 0
+# pub_imu_vel = rospy.Publisher('/ego_vel', Float32MultiArray, latch=True, queue_size=10)
+# pub_flag = rospy.Publisher('/flag', Bool, latch=True, queue_size=10)
 
 
 def initialize_map():
-    global test_map
-    global test_map_zero
-    global np_map
-    test_map.info.resolution = res
-    test_map.info.width = 600
-    test_map.info.height = 360
-    test_map.info.origin.position.x = 0.0
-    test_map.info.origin.position.y = 0.0
-    test_map.info.origin.position.z = 0.0
-    test_map.info.origin.orientation.x = 0.0
-    test_map.info.origin.orientation.y = 0.0
-    test_map.info.origin.orientation.z = 0.0
-    test_map.info.origin.orientation.w = 0.0
-    test_map.data = []
-    area = test_map.info.width * test_map.info.height
-    for i in range(0, area):
-        test_map.data.append(0)
+    Map.data = OccupancyGrid()
+    Map.data.info.resolution = Map.res
+    Map.data.info.width = 600
+    Map.data.info.height = 360
+    Map.data.info.origin.position.x = 0.0
+    Map.data.info.origin.position.y = 0.0
+    Map.data.info.origin.position.z = 0.0
+    Map.data.info.origin.orientation.x = 0.0
+    Map.data.info.origin.orientation.y = 0.0
+    Map.data.info.origin.orientation.z = 0.0
+    Map.data.info.origin.orientation.w = 0.0
+    Map.data.data = []
 
-    np_map = np.array(test_map.data)
-    np_map = np_map.reshape(test_map.info.height, test_map.info.width)
-    for i in range(231 - 60, 231):
-        for j in range(127, 127 + 19):
-            np_map[j, i] = 99
+    np_map = np.zeros([Map.data.info.height, Map.data.info.width])
     np_map = np_map.flatten()
-    test_map.data = np_map
+    Map.data.data = np_map
 
-    test_map_zero = copy.copy(test_map)
+    Map.initial_data = copy.copy(Map.data)
 
     print("Map Generated")
 
 
 def talker():
-    global person_x_abs, person_y_abs, x, y, np_map, test_map, path, p_x, p_y
+    # msg = Float32MultiArray()
+    # msg.data = []
+    # msg.data = [person_x_abs, person_y_abs]
+    # pub_person_pose.publish(msg)
 
-    msg = Float32MultiArray()
-    msg.data = []
-    msg.data = [person_x_abs, person_y_abs]
-    pub_person_pose.publish(msg)
+    pub_map.publish(Map.data)
 
-    pose = np.array([x, y])
+    pose = np.array([AGV.x, AGV.y])
     msg = Float32MultiArray()
     msg.data = pose
     pub_ego_pose.publish(msg)
 
     msg = Float32()
-    msg.data = yaw
+    msg.data = AGV.yaw
     pub_ego_yaw.publish(msg)
 
-    pub_map.publish(test_map)
-
-    msg = Float32MultiArray()
-    msg.data = [path[21]/100 + x , path[21+166]/100 + y] # Where we stopped last time! ADDED EGO POSE
-    pub_path.publish(msg)
-
     msg = Float32()
-    msg.data = steering_angle
+    msg.data = AGV.steering_angle
     pub_steer.publish(msg)
 
-    msg.data = steer_mapped
-    pub_steer_mapped.publish(msg)
-
     msg = Float32MultiArray()
-    msg.data = np.array([p_x/100 + x, p_y/100 + y ])
-    pub_desired_path.publish(msg)
+    msg.data = np.array([Map.p_x*Map.res + AGV.x, Map.p_y*Map.res + AGV.y])
+    pub_path.publish(msg)
 
-    msg = Float32MultiArray()
-    msg.data = [imu_velx, imu_vely]
-    pub_imu_vel.publish(msg)
+    # msg = Float32MultiArray()
+    # msg.data = [imu_vel_x, imu_vel_y]
+    # pub_imu_vel.publish(msg)
 
     msg = PointCloud()
-    for i in range (166):
-        temp = Point32()
-        temp.x = path[i]/100 + x
-        temp.y = path[i+166]/100 + y
-        msg.points.append(temp)
     msg.header.frame_id = "map"
+    for i in range(166):
+        temp = Point32()
+        temp.x = Map.path[0, i] / 100 + AGV.x
+        temp.y = Map.path[1, i] / 100 + AGV.y
+        msg.points.append(temp)
     pub_path_points.publish(msg)
 
+    marker_ = update_marker()
     msg = marker_
     pub_marker.publish(msg)
 
 
 def listener():
+    rospy.Subscriber('/hedge_pos_ang', hedge_pos_ang, callback_update_pos)
+    rospy.Subscriber("/darknet_ros/bounding_boxes", BoundingBoxes, callback_update_person_pos)
+    rospy.Subscriber("/imu", Imu, callback_update_yaw)
+    # rospy.Subscriber("/zed2i/zed_node/pose", PoseStamped, callback_update_pos_zed)
+    # rospy.Subscriber("/zed2i/zed_node/obj_det/objects", ObjectsStamped, callback_update_person_pos)
+
     rate = rospy.Rate(20)
-
-    global x
-    global y
-    global x2
-    global y2
-    global person_x
-    global person_y
-    global person_detected
-    global yaw
-    global test_map, np_map
-
     while not rospy.is_shutdown():
-        rospy.Subscriber('/hedge_pos_ang', hedge_pos_ang, callback_update_pos)
-        rospy.Subscriber("/zed2i/zed_node/pose", PoseStamped, callback_update_pos_zed)
-        # rospy.Subscriber("/zed2i/zed_node/obj_det/objects", ObjectsStamped, callback_update_person_pos)
-        rospy.Subscriber("/darknet_ros/bounding_boxes", BoundingBoxes, callback_update_person_pos)
-        rospy.Subscriber("/imu", Imu, callback_update_yaw)
+        # Initialize map before information is updated
+        Map.data = copy.copy(Map.initial_data)
 
-        # person_x_abs = person_x# - 0.34
-        # person_y_abs = person_y# - 1.8
+        update_goal()
 
-        test_map = copy.copy(test_map_zero)
-        np_map = np.array(test_map.data)
-        np_map = np_map.reshape(test_map.info.height, test_map.info.width)
+        np_map = np.array(Map.data.data)
+        np_map = np_map.reshape(Map.data.info.height, Map.data.info.width)
 
-        # zed pos
+        # Marvelmind pos
+        for i in range(int(AGV.x / Map.res - 38), int(AGV.x / Map.res)):
+            for j in range(int(AGV.y / Map.res) - 9, int(AGV.y / Map.res) + 9):
+                np_map[j, i] = 50
+
+        # Person pos
+        if Person.detected == 1:
+            np_map = occupancy_function(np_map, Person.x, Person.y)
+
+        # Parked Vehicle
+        # for i in range(231 - 60, 231):
+        #     for j in range(127, 127 + 19):
+        #         np_map[j, i] = 99
+
+        # ZED pos
         # for i in range(int(x/res)-34, int(x/res)+5):
         #    for j in range(int(y/res)-9, int(y/res)+9):
         #        np_map[j,i]=50
 
-        # marvel pos
-        for i in range(int(x / res -38), int(x / res) ):
-            for j in range(int(y / res) - 9, int(y / res) + 9):
-                np_map[j, i] = 50
-
-        show_marker()
-
-        # person pos
-        if person_detected == 1:
-            np_map = occupancy_function(person_x, person_y)
-
-        a_star(x, y)
-
-        callback_tracker()
-
-        if person_x < 0:
-            pub_flag.publish(True)
-        else:
-            pub_flag.publish(False)
-
+        np_map = a_star(np_map)
+        pure_pursuit()
         np_map_flat = np_map.flatten()
-        test_map.data = np_map_flat
+        Map.data = np_map_flat
 
         talker()
         rate.sleep()
 
 
-def show_marker():
-    global marker_, goalx_global, goaly_global
+def initialize_yaw():
+    rospy.Subscriber('/imu', Imu, simple_update_yaw)
+    time.sleep(0.1)
+    for i in range(5):
+        rospy.Subscriber('/imu', Imu, simple_update_yaw)
+        AGV.yaw_offset[0, i] = AGV.yaw
+        time.sleep(0.1)
+
+    AGV.yaw_offset = np.mean(AGV.yaw_offset)
+
+    print("Initialized Yaw with Offset")
+
+
+def callback_update_pos(pos):
+    if pos.address == 12:
+        AGV.x1 = pos.x_m
+        AGV.y1 = pos.y_m
+
+    if pos.address == 13:
+        AGV.x2 = pos.x_m
+        AGV.y2 = pos.y_m
+
+    AGV.x = (AGV.x1 + AGV.x2) / 2 + 0.36 * np.cos(np.deg2rad(AGV.yaw))
+    AGV.y = (AGV.y1 + AGV.y2) / 2 + 0.36 * np.sin(np.deg2rad(AGV.yaw))
+
+
+def simple_update_yaw(rpy):
+    if rpy.orientation.x >= 0:
+        AGV.yaw = rpy.orientation.x
+    else:
+        print("IMU values inconsistent. Check IMU.")
+
+
+def callback_update_yaw(rpy):
+    if rpy.orientation.x >= 0:
+        AGV.yaw = -(rpy.orientation.x - AGV.yaw_offset)
+    else:
+        AGV.yaw = -(rpy.orientation.x - AGV.yaw_offset + 360)
+    # imu_vel_x = rpy.angular_velocity.x
+    # imu_vel_y = rpy.angular_velocity.y
+
+
+# def callback_update_pos_zed(pos):
+#     global zed_x
+#     global zed_y
+#     zed_x = pos.pose.position.x
+#     zed_y = pos.pose.position.y
+
+
+def callback_update_person_pos(detected):
+    if detected.bounding_boxes:
+        for i in range(len(detected.bounding_boxes)):
+            if detected.bounding_boxes[i].Class == "person":
+                Person.detected = 1
+                Person.x = 4.3  # 2.7
+                Person.y = 1.7
+                continue
+
+
+def occupancy_function(np_map, x_, y_):
+    d_safe = 1.5
+    lane_width = 0.9
+    res_ = 1 / Map.res
+    for i in range(int(x_ * res_ - d_safe * res_), int(x_ * res_ + d_safe * res_)):
+        for j in range(int(y_ * res_ - lane_width / 2 * res_ * (np.cos(np.pi * (i - x_ * res_) / d_safe / res_))),
+                       int(y_ * res_ + lane_width / 2 * res_ * (np.cos(np.pi * (i - x_ * res_) / d_safe / res_)))):
+            np_map[j, i] = 100
+    return np_map
+
+
+def a_star(np_map):
+    path = Map.path
+    res_ = 1 / Map.res
+    goal_x = Map.goal_x * res_
+    goal_y = Map.goal_y * res_
+    min_i = 0
+    min_j = 0
+    ego_x = int(round(AGV.x * res_))
+    ego_y = int(round(AGV.y * res_))
+    for n in range(0, 166):
+        min_ = 1000000
+        for i in range(ego_x - 1, ego_x + 2):
+            for j in range(ego_y - 1, ego_y + 2):
+                buffer = np.sqrt(np.square(goal_x - i) + np.square(goal_y - j))
+                buffer = buffer + np_map[j, i] * buffer
+                if buffer < min_:
+                    min_ = copy.copy(buffer)
+                    min_i = i
+                    min_j = j
+        ego_x = min_i
+        ego_y = min_j
+
+        path[n] = ego_x - round(AGV.x * res_)
+        path[166 + n] = ego_y - round(AGV.y * res_)
+    Map.path = np.reshape(path, [2, 166])
+    return np_map
+
+
+def pure_pursuit():
+    res_ = 1 / Map.res
+    ld = 1.1 * 0.5 * res_  # [m]. Look ahead distance, 0.5s preview time
+    wheel_base = 0.15 * res_
+    yaw_ = np.deg2rad(AGV.yaw)
+    path = Map.path
+    rear_center = [-wheel_base / 2 * np.cos(yaw_), -wheel_base / 2 * np.sin(yaw_)]
+    min_ = 1000000
+    min_n = 0
+    for n in range(0, 100):
+        buffer = np.sqrt(np.square(rear_center[0] - path[0, n]) + np.square(rear_center[1] - path[1, n]))
+        if abs(buffer - ld) < min_:
+            min_ = abs(buffer - ld)
+            min_n = n
+
+    Map.p_x = path[0, min_n]
+    Map.p_y = path[1, min_n]
+
+    alpha = np.arctan(Map.p_y / Map.p_x) - yaw_
+    AGV.steering_angle = np.arctan(2 * wheel_base * np.sin(alpha) / ld)
+
+
+def update_goal():
+    if Map.score > 5:
+        rospy.signal_shutdown("Score = 5. End of experiment.")
+    if (AGV.x - Map.goal_x) ^ 2 + (AGV.y - Map.goal_y) ^ 2 < 0.3:
+        Map.score += 1
+        print("Goal. Score = ", Map.score)
+
+        Map.goal_x = np.random.randint(100, 500)/100
+        Map.goal_y = np.random.randint(100, 300)/100
+        print("New goal = ", Map.goal_x, ", ", Map.goal_y)
+
+
+def update_marker():
     marker_ = Marker()
     marker_.header.frame_id = "/map"
     marker_.type = marker_.CUBE
     marker_.action = marker_.ADD
 
-    marker_.pose.position.x = goalx_global
-    marker_.pose.position.y = goaly_global
+    marker_.pose.position.x = Map.goal_x
+    marker_.pose.position.y = Map.goal_y
     marker_.pose.position.z = 0
     marker_.pose.orientation.x = 0
     marker_.pose.orientation.y = 0
@@ -246,188 +304,11 @@ def show_marker():
     return marker_
 
 
-def initialize_pos():
-    global pos_offset
-    global yaw_offset
-    global x, y, yaw
-    global x1, y1
-    global x2, y2
-
-    rospy.Subscriber('/hedge_pos_ang', hedge_pos_ang, simple_update_pos)
-    rospy.Subscriber('/imu', Imu, simple_update_yaw)
-    time.sleep(0.5)
-    for i in range(2):
-        rospy.Subscriber('/hedge_pos_ang', hedge_pos_ang, simple_update_pos)
-        rospy.Subscriber('/imu', Imu, simple_update_yaw)
-        x = (x1 + x2) / 2
-        y = (y1 + y2) / 2
-        yaw_offset[0,i] = yaw
-        pos_offset[0,i] = x
-        pos_offset[1,i] = y
-        time.sleep(0.5)
-
-    pos_offset = np.mean(pos_offset, axis=1)
-    yaw_offset = np.mean(yaw_offset)
-
-    print("Initialized Position and Yaw with Offset")
-
-
-def simple_update_pos(pos):
-    global x1, y1
-    global x2, y2
-    if pos.address == 12:
-        x1 = pos.x_m
-        y1 = pos.y_m
-
-    if pos.address == 13:
-        x2 = pos.x_m
-        y2 = pos.y_m
-
-
-def callback_update_pos(pos):
-    global x1, y1
-    global x2, y2
-    global pos_offset
-    global yaw
-
-    if pos.address == 12:
-        x1 = pos.x_m
-        y1 = pos.y_m
-
-    if pos.address == 13:
-        x2 = pos.x_m
-        y2 = pos.y_m
-
-    AGV.x = (x1+x2)/2 + 0.36 * np.cos(np.deg2rad(yaw))# - pos_offset[0] + 0.34
-    AGV.y = (y1+y2)/2 + 0.36 * np.sin(np.deg2rad(yaw))# - pos_offset[1] + 1.8
-
-
-def simple_update_yaw(rpy):
-    global yaw
-    yaw = rpy.orientation.x
-
-
-def callback_update_yaw(rpy):
-    global yaw, yaw_offset, imu_velx, imu_vely
-    if rpy.orientation.x >= 0:
-        yaw = -(rpy.orientation.x - yaw_offset)
-    else:
-        yaw = -(rpy.orientation.x - yaw_offset + 360)
-    imu_velx = rpy.angular_velocity.x
-    imu_vely = rpy.angular_velocity.y
-
-
-def callback_update_pos_zed(pos):
-    global zed_x
-    global zed_y
-    zed_x = pos.pose.position.x
-    zed_y = pos.pose.position.y
-
-
-def callback_update_person_pos(detected):
-    global person_x
-    global person_y
-    global person_detected
-    if detected.bounding_boxes:
-        for i in range(len(detected.bounding_boxes)):
-            if detected.bounding_boxes[i].Class == "person":
-                person_detected = 1
-                # obj = detected.bounding_boxes[i]
-                # person_x = obj.position[0] + 0.3
-                # person_y = obj.position[1] + 1.8
-                person_x = 4.3 # 2.7
-                person_y = 1.7
-                continue
-    # else:
-    #     person_x = 2.2
-    #     person_y = 1.37
-    #     person_detected = 0
-
-
-def occupancy_function(x_, y_):
-    global res, np_map
-    d_safe = 1.5
-    lane_width = 0.9
-    res_ = 1 / res
-    a = 1
-    for i in range(int(x_ * res_ - d_safe * res_), int(x_ * res_ + d_safe * res_)):
-        for j in range(int(y_ * res_ - lane_width / 2 * res_ * (np.cos(np.pi * (i - x_ * res_) / d_safe / res_))),
-                       int(y_ * res_ + lane_width / 2 * res_ * (np.cos(np.pi * (i - x_ * res_) / d_safe / res_)))):
-            np_map[j, i] = 100
-    return np_map
-
-
-def a_star(ego_x_abs, ego_y_abs):
-    global res
-    global np_map
-    global path
-    global goalx_global, goaly_global
-
-    res_ = 1 / res
-    goalx = goalx_global * res_
-    goaly = goaly_global * res_
-    min_i = 0
-    min_j = 0
-    ego_x = int(round(ego_x_abs * res_))
-    ego_y = int(round(ego_y_abs * res_))
-    for n in range(0, 166):
-        min_ = 1000000
-        for i in range(ego_x - 1, ego_x + 2):
-            for j in range(ego_y - 1, ego_y + 2):
-                buffer = np.sqrt(np.square(goalx - i) + np.square(goaly - j))
-                buffer = buffer + np_map[j, i] * buffer
-                if buffer < min_:
-                    min_ = copy.copy(buffer)
-                    min_i = i
-                    min_j = j
-        ego_x = min_i
-        ego_y = min_j
-
-        path[n] = ego_x - round(ego_x_abs * res_)
-        path[166 + n] = ego_y - round(ego_y_abs * res_)
-
-
-def callback_tracker():
-    global steering_angle
-    global p_x, p_y
-    global path
-    global path_data
-    global steer_mapped
-    res_ = 1/res
-    ld = 1.1 * 0.5 * res_  # [m]. Look ahead distance, 0.5s preview time
-    L = 0.15 * res_  # wheel base
-    yaw_ = np.deg2rad(yaw)
-
-    path_data = np.reshape(path, [2, 166])
-    rear_center = [-L / 2 * np.cos(yaw_), -L / 2 * np.sin(yaw_)]
-    min = 1000000
-    min_n = 0
-    for n in range(0, 100):
-        buffer = np.sqrt(np.square(rear_center[0] - path_data[0, n]) + np.square(rear_center[1] - path_data[1, n]))
-        if abs(buffer - ld) < min:
-            min = abs(buffer - ld)
-            min_n = n
-
-    p_x = path_data[0, min_n]
-    p_y = path_data[1, min_n]
-
-    alpha = np.arctan(p_y / p_x) - yaw_
-    steering_angle = np.arctan(2 * L * np.sin(alpha) / ld)
-    steer_mapped = (steering_angle*180/np.pi + 2.2)/23
-
-
-class AGV:
-    def __init__(self, x, y, yaw):
-        self.x = x
-        self.y = y
-        self.yaw = yaw
-
-
 if __name__ == '__main__':
     try:
-        rospy.init_node('AGV_node', anonymous=True)
+        rospy.init_node('AGV_node', anonymous=True, disable_signals=False)
         initialize_map()
-        initialize_pos()
+        initialize_yaw()
         listener()
 
     except rospy.ROSInterruptException:
