@@ -53,7 +53,7 @@ def initialize_map():
     np_map = np_map.flatten()
     Map.data.data = np_map
 
-    Map.initial_data = copy.copy(Map.data)
+    Map.initial_data = Map.data
 
     print("Map Generated")
 
@@ -111,7 +111,7 @@ def listener():
     rate = rospy.Rate(20)
     while not rospy.is_shutdown():
         # Initialize map before information is updated
-        Map.data = copy.copy(Map.initial_data)
+        Map.data = Map.initial_data
 
         update_goal()
 
