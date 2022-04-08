@@ -15,7 +15,6 @@ from geometry_msgs.msg import Point32
 
 from marvelmind_nav.msg import hedge_pos_ang
 
-from std_msgs.msg import Header
 from sensor_msgs.msg import Imu
 from sensor_msgs.msg import PointCloud
 from visualization_msgs.msg import Marker
@@ -108,8 +107,6 @@ def listener():
     rospy.Subscriber('/hedge_pos_ang', hedge_pos_ang, callback_update_pos)
     rospy.Subscriber("/darknet_ros/bounding_boxes", BoundingBoxes, callback_update_person_pos)
     rospy.Subscriber("/imu", Imu, callback_update_yaw)
-    # rospy.Subscriber("/zed2i/zed_node/pose", PoseStamped, callback_update_pos_zed)
-    # rospy.Subscriber("/zed2i/zed_node/obj_det/objects", ObjectsStamped, callback_update_person_pos)
 
     rate = rospy.Rate(20)
     while not rospy.is_shutdown():
@@ -121,7 +118,7 @@ def listener():
         np_map = np.array(Map.data.data)
         np_map = np_map.reshape(Map.data.info.height, Map.data.info.width)
 
-        # Marvelmind pos
+        # Update Occupancy value from Marvelmind pos 
         # for i in range(int(AGV.x / Map.res - 38), int(AGV.x / Map.res)):
         #     for j in range(int(AGV.y / Map.res) - 9, int(AGV.y / Map.res) + 9):
         #         np_map[j, i] = 50
