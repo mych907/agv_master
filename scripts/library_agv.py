@@ -1,14 +1,15 @@
 import numpy as np
+from nav_msgs.msg import OccupancyGrid
 
 
 class AGV:
     x1 = x2 = 0
     y1 = 1.9
     y2 = 1.7
-    x = 0
-    y = 1.8
     yaw = 0
-    yaw_offset = np.zeros((1, 2))
+    x = 0 + 0.38/2 * np.cos(np.deg2rad(yaw))
+    y = 1.8 + 0.38/2 * np.sin(np.deg2rad(yaw))
+    yaw_offset = np.zeros((1, 5))
     steering_angle = 0
 
     def __init__(self, x, y, x1, y1, x2, y2, yaw, yaw_offset, steering_angle):
@@ -35,12 +36,12 @@ class Person:
 
 
 class Map:
-    initial_data = None
-    data = None
+    initial_data = OccupancyGrid
+    data = OccupancyGrid()
     goal_x = 4  # 5
-    goal_y = 2  # 1.8
+    goal_y = 1.8  # 1.8
     res = 0.01
-    path = np.zeros(166 * 2)
+    path = np.zeros([2, 166])
     p_x = 0
     p_y = 0
     score = 0

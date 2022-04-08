@@ -15,12 +15,10 @@ from geometry_msgs.msg import Point32
 
 from marvelmind_nav.msg import hedge_pos_ang
 
-from zed_interfaces.msg import ObjectsStamped
 from std_msgs.msg import Header
 from sensor_msgs.msg import Imu
 from sensor_msgs.msg import PointCloud
 from visualization_msgs.msg import Marker
-from zed_interfaces.msg import Object
 from darknet_ros_msgs.msg import BoundingBoxes
 
 from library_agv import AGV, Person, Map
@@ -32,7 +30,8 @@ pub_person_pose = rospy.Publisher('/person_pose', Float32MultiArray, latch=True,
 pub_path = rospy.Publisher('/path', Float32MultiArray, latch=True, queue_size=10)
 pub_steer = rospy.Publisher('/steering_angle', Float32, latch=True, queue_size=10)
 pub_path_points = rospy.Publisher('/visual', PointCloud, latch=True, queue_size=10)
-pub_marker = rospy.Publisher('/visualization_marker', Marker, latch=True, queue_size=10)
+pub_marker_goal = rospy.Publisher('/marker_goal', Marker, latch=True, queue_size=10)
+pub_marker_car = rospy.Publisher('/marker_car', Marker, latch=True, queue_size=10)
 # pub_imu_vel = rospy.Publisher('/ego_vel', Float32MultiArray, latch=True, queue_size=10)
 # pub_flag = rospy.Publisher('/flag', Bool, latch=True, queue_size=10)
 
@@ -98,9 +97,11 @@ def talker():
         msg.points.append(temp)
     pub_path_points.publish(msg)
 
-    marker_ = update_marker()
-    msg = marker_
-    pub_marker.publish(msg)
+    marker_goal = update_marker_goal()
+    pub_marker_goal.publish(marker_goal)
+
+    marker_car = update_marker_car()
+    pub_marker_car.publish(marker_car)
 
 
 def listener():
@@ -121,28 +122,22 @@ def listener():
         np_map = np_map.reshape(Map.data.info.height, Map.data.info.width)
 
         # Marvelmind pos
-        for i in range(int(AGV.x / Map.res - 38), int(AGV.x / Map.res)):
-            for j in range(int(AGV.y / Map.res) - 9, int(AGV.y / Map.res) + 9):
-                np_map[j, i] = 50
+        # for i in range(int(AGV.x / Map.res - 38), int(AGV.x / Map.res)):
+        #     for j in range(int(AGV.y / Map.res) - 9, int(AGV.y / Map.res) + 9):
+        #         np_map[j, i] = 50
 
         # Person pos
         if Person.detected == 1:
-            np_map = occupancy_function(np_map, Person.x, Person.y)
+            np_map = lime_occupancy(np_map, Person.x, Person.y)
 
         # Parked Vehicle
         # for i in range(231 - 60, 231):
         #     for j in range(127, 127 + 19):
         #         np_map[j, i] = 99
-
-        # ZED pos
-        # for i in range(int(x/res)-34, int(x/res)+5):
-        #    for j in range(int(y/res)-9, int(y/res)+9):
-        #        np_map[j,i]=50
-
-        np_map = a_star(np_map)
+        a_star(np_map)
         pure_pursuit()
         np_map_flat = np_map.flatten()
-        Map.data = np_map_flat
+        Map.data.data = np_map_flat
 
         talker()
         rate.sleep()
@@ -170,8 +165,8 @@ def callback_update_pos(pos):
         AGV.x2 = pos.x_m
         AGV.y2 = pos.y_m
 
-    AGV.x = (AGV.x1 + AGV.x2) / 2 + 0.36 * np.cos(np.deg2rad(AGV.yaw))
-    AGV.y = (AGV.y1 + AGV.y2) / 2 + 0.36 * np.sin(np.deg2rad(AGV.yaw))
+    AGV.x = (AGV.x1 + AGV.x2) / 2 + 0.36/2 * np.cos(np.deg2rad(AGV.yaw))
+    AGV.y = (AGV.y1 + AGV.y2) / 2 + 0.36/2 * np.sin(np.deg2rad(AGV.yaw))
 
 
 def simple_update_yaw(rpy):
@@ -190,13 +185,6 @@ def callback_update_yaw(rpy):
     # imu_vel_y = rpy.angular_velocity.y
 
 
-# def callback_update_pos_zed(pos):
-#     global zed_x
-#     global zed_y
-#     zed_x = pos.pose.position.x
-#     zed_y = pos.pose.position.y
-
-
 def callback_update_person_pos(detected):
     if detected.bounding_boxes:
         for i in range(len(detected.bounding_boxes)):
@@ -207,7 +195,7 @@ def callback_update_person_pos(detected):
                 continue
 
 
-def occupancy_function(np_map, x_, y_):
+def lime_occupancy(np_map, x_, y_):
     d_safe = 1.5
     lane_width = 0.9
     res_ = 1 / Map.res
@@ -240,10 +228,10 @@ def a_star(np_map):
         ego_x = min_i
         ego_y = min_j
 
-        path[n] = ego_x - round(AGV.x * res_)
-        path[166 + n] = ego_y - round(AGV.y * res_)
-    Map.path = np.reshape(path, [2, 166])
-    return np_map
+        path[0, n] = ego_x - round(AGV.x * res_)
+        path[1, n] = ego_y - round(AGV.y * res_)
+
+    Map.path = path
 
 
 def pure_pursuit():
@@ -271,7 +259,7 @@ def pure_pursuit():
 def update_goal():
     if Map.score > 5:
         rospy.signal_shutdown("Score = 5. End of experiment.")
-    if (AGV.x - Map.goal_x) ^ 2 + (AGV.y - Map.goal_y) ^ 2 < 0.3:
+    if (AGV.x - Map.goal_x)*(AGV.x - Map.goal_x) + (AGV.y - Map.goal_y)*(AGV.y - Map.goal_y) < 0.3:
         Map.score += 1
         print("Goal. Score = ", Map.score)
 
@@ -280,28 +268,64 @@ def update_goal():
         print("New goal = ", Map.goal_x, ", ", Map.goal_y)
 
 
-def update_marker():
-    marker_ = Marker()
-    marker_.header.frame_id = "/map"
-    marker_.type = marker_.CUBE
-    marker_.action = marker_.ADD
+def euler_to_quat(roll, pitch, yaw):
+    qx = np.sin(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) - np.cos(roll / 2) * np.sin(pitch / 2) * np.sin(yaw / 2)
+    qy = np.cos(roll / 2) * np.sin(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.cos(pitch / 2) * np.sin(yaw / 2)
+    qz = np.cos(roll / 2) * np.cos(pitch / 2) * np.sin(yaw / 2) - np.sin(roll / 2) * np.sin(pitch / 2) * np.cos(yaw / 2)
+    qw = np.cos(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.sin(pitch / 2) * np.sin(yaw / 2)
 
-    marker_.pose.position.x = Map.goal_x
-    marker_.pose.position.y = Map.goal_y
-    marker_.pose.position.z = 0
-    marker_.pose.orientation.x = 0
-    marker_.pose.orientation.y = 0
-    marker_.pose.orientation.z = 0
-    marker_.pose.orientation.w = 0
+    return [qx, qy, qz, qw]
 
-    marker_.scale.x = 0.2
-    marker_.scale.y = 0.2
-    marker_.scale.z = 0.2
-    marker_.color.a = 0.5
+
+def update_marker_goal():
+    marker_goal = Marker()
+    marker_goal.header.frame_id = "/map"
+    marker_goal.type = marker_goal.CUBE
+    marker_goal.action = marker_goal.ADD
+
+    marker_goal.pose.position.x = Map.goal_x
+    marker_goal.pose.position.y = Map.goal_y
+    marker_goal.pose.position.z = 0
+
+    marker_goal.pose.orientation.x = 0
+    marker_goal.pose.orientation.y = 0
+    marker_goal.pose.orientation.z = 0
+    marker_goal.pose.orientation.w = 0
+
+    marker_goal.scale.x = 0.2
+    marker_goal.scale.y = 0.2
+    marker_goal.scale.z = 0.2
+    marker_goal.color.a = 0.5
     red_ = 255
-    marker_.color.r = red_
+    marker_goal.color.r = red_
 
-    return marker_
+    return marker_goal
+
+
+def update_marker_car():
+    marker_car = Marker()
+    marker_car.header.frame_id = "/map"
+    marker_car.type = marker_car.CUBE
+    marker_car.action = marker_car.ADD
+
+    marker_car.pose.position.x = AGV.x
+    marker_car.pose.position.y = AGV.y
+    marker_car.pose.position.z = 0
+
+    [qx, qy, qz, qw] = euler_to_quat(0, 0, AGV.yaw)
+    marker_car.pose.orientation.x = qx
+    marker_car.pose.orientation.y = qy
+    marker_car.pose.orientation.z = qz
+    marker_car.pose.orientation.w = qw
+
+    marker_car.scale.x = 0.38
+    marker_car.scale.y = 0.18
+    marker_car.scale.z = 0.2
+    marker_car.color.a = 0.5
+    green_ = 255
+    marker_car.color.g = green_
+
+    return marker_car
 
 
 if __name__ == '__main__':
