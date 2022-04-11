@@ -11,6 +11,7 @@ Panels:
         - /PointCloud1/Status1
         - /Marker1
         - /Marker1/Status1
+        - /Marker2
       Splitter Ratio: 0.5
     Tree Height: 1088
   - Class: rviz/Selection
@@ -97,11 +98,19 @@ Visualization Manager:
       Value: true
     - Class: rviz/Marker
       Enabled: true
-      Marker Topic: visualization_marker
+      Marker Topic: /marker_goal
       Name: Marker
       Namespaces:
         "": true
       Queue Size: 10
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /marker_car
+      Name: Marker
+      Namespaces:
+        "": true
+      Queue Size: 100
       Value: true
   Enabled: true
   Global Options:
@@ -130,7 +139,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0
+      Angle: -0.004999999888241291
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
