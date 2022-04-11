@@ -31,8 +31,11 @@ pub_steer = rospy.Publisher('/steering_angle', Float32, latch=True, queue_size=1
 pub_path_points = rospy.Publisher('/visual', PointCloud, latch=True, queue_size=10)
 pub_marker_goal = rospy.Publisher('/marker_goal', Marker, latch=True, queue_size=10)
 pub_marker_car = rospy.Publisher('/marker_car', Marker, latch=True, queue_size=10)
+pub_marker_direction = rospy.Publisher('/marker_direction', Marker, latch=True, queue_size=10)
 # pub_imu_vel = rospy.Publisher('/ego_vel', Float32MultiArray, latch=True, queue_size=10)
 # pub_flag = rospy.Publisher('/flag', Bool, latch=True, queue_size=10)
+
+pub_steer_ = rospy.Publisher('/steering_', Float32, latch=True, queue_size=10)
 
 
 def initialize_map():
@@ -79,6 +82,8 @@ def talker():
     msg.data = AGV.steering_angle
     pub_steer.publish(msg)
 
+    pub_steer_.publish(np.rad2deg(msg.data))
+
     msg = Float32MultiArray()
     msg.data = np.array([Map.p_x*Map.res + AGV.x, Map.p_y*Map.res + AGV.y])
     pub_path.publish(msg)
@@ -101,6 +106,9 @@ def talker():
 
     marker_car = update_marker_car()
     pub_marker_car.publish(marker_car)
+
+    marker_direction = update_marker_direction()
+    pub_marker_direction.publish(marker_direction)
 
 
 def listener():
@@ -133,6 +141,7 @@ def listener():
         #         np_map[j, i] = 99
         a_star(np_map)
         pure_pursuit()
+        # stanley()
         np_map_flat = np_map.flatten()
         Map.data.data = np_map_flat
 
@@ -141,16 +150,14 @@ def listener():
 
 
 def initialize_yaw():
-    rospy.Subscriber('/imu', Imu, simple_update_yaw)
-    time.sleep(0.1)
-    for i in range(5):
-        rospy.Subscriber('/imu', Imu, simple_update_yaw)
-        AGV.yaw_offset[0, i] = AGV.yaw
-        time.sleep(0.1)
+    rpy = rospy.wait_for_message('/imu', Imu)
+    if rpy.orientation.x >= 0:
+        AGV.yaw_offset = rpy.orientation.x
+        print("Initialized Yaw with Offset")
 
-    AGV.yaw_offset = np.mean(AGV.yaw_offset)
-
-    print("Initialized Yaw with Offset")
+    else:
+        print("IMU values inconsistent. Check IMU.")
+        rospy.signal_shutdown(" ")
 
 
 def callback_update_pos(pos):
@@ -164,13 +171,6 @@ def callback_update_pos(pos):
 
     AGV.x = (AGV.x1 + AGV.x2) / 2 + 0.36/2 * np.cos(np.deg2rad(AGV.yaw))
     AGV.y = (AGV.y1 + AGV.y2) / 2 + 0.36/2 * np.sin(np.deg2rad(AGV.yaw))
-
-
-def simple_update_yaw(rpy):
-    if rpy.orientation.x >= 0:
-        AGV.yaw = rpy.orientation.x
-    else:
-        print("IMU values inconsistent. Check IMU.")
 
 
 def callback_update_yaw(rpy):
@@ -212,7 +212,7 @@ def a_star(np_map):
     min_j = 0
     ego_x = int(round(AGV.x * res_))
     ego_y = int(round(AGV.y * res_))
-    for n in range(0, 166):
+    for n in range(166):
         min_ = 1000000
         for i in range(ego_x - 1, ego_x + 2):
             for j in range(ego_y - 1, ego_y + 2):
@@ -240,7 +240,7 @@ def pure_pursuit():
     rear_center = [-wheel_base / 2 * np.cos(yaw_), -wheel_base / 2 * np.sin(yaw_)]
     min_ = 1000000
     min_n = 0
-    for n in range(0, 100):
+    for n in range(100):
         buffer = np.sqrt(np.square(rear_center[0] - path[0, n]) + np.square(rear_center[1] - path[1, n]))
         if abs(buffer - ld) < min_:
             min_ = abs(buffer - ld)
@@ -253,16 +253,37 @@ def pure_pursuit():
     AGV.steering_angle = np.arctan(2 * wheel_base * np.sin(alpha) / ld)
 
 
+def stanley():
+    res_ = 1 / Map.res
+    yaw_ = np.deg2rad(AGV.yaw)
+    path = Map.path
+    wheel_base = 0.15 * res_
+    front_center = [wheel_base / 2 * np.cos(yaw_), wheel_base / 2 * np.sin(yaw_)]
+    k_s = 0.000001
+    min_ = 1000000
+    min_n = 0
+    k = 0.5  # Tuning parameter
+    v = 0.7  # Approximate velocity in m/s
+    for n in range(100):
+        buffer = np.sqrt(np.square(front_center[0] - path[0, n]) + np.square(front_center[1] - path[1, n]))
+        if buffer < min_:
+            min_ = buffer
+            min_n = n
+    delta1 = np.arctan((path[1, min_n+10] - path[1, min_n-5]) / (path[0, min_n+10] - path[0, min_n-5]))  # heading error
+    delta2 = np.arctan(k*min_/(k_s + v))
+    AGV.steering_angle = delta1 + delta2
+
+
 def update_goal():
     if Map.score > 5:
         rospy.signal_shutdown("Score = 5. End of experiment.")
     if (AGV.x - Map.goal_x)*(AGV.x - Map.goal_x) + (AGV.y - Map.goal_y)*(AGV.y - Map.goal_y) < 0.3:
         Map.score += 1
-        print("Goal. Score = ", Map.score)
+        print("Goal. Score = {}".format(Map.score))
 
         Map.goal_x = np.random.randint(100, 500)/100
         Map.goal_y = np.random.randint(100, 300)/100
-        print("New goal = ", Map.goal_x, ", ", Map.goal_y)
+        print("New goal = {}, {}".format(Map.goal_x, Map.goal_y))
 
 
 def euler_to_quat(roll, pitch, yaw):
@@ -284,10 +305,11 @@ def update_marker_goal():
     marker_goal.pose.position.y = Map.goal_y
     marker_goal.pose.position.z = 0
 
-    marker_goal.pose.orientation.x = 0
-    marker_goal.pose.orientation.y = 0
-    marker_goal.pose.orientation.z = 0
-    marker_goal.pose.orientation.w = 0
+    [qx, qy, qz, qw] = euler_to_quat(0, 0, 0)
+    marker_goal.pose.orientation.x = qz
+    marker_goal.pose.orientation.y = qy
+    marker_goal.pose.orientation.z = qz
+    marker_goal.pose.orientation.w = qw
 
     marker_goal.scale.x = 0.2
     marker_goal.scale.y = 0.2
@@ -309,7 +331,7 @@ def update_marker_car():
     marker_car.pose.position.y = AGV.y
     marker_car.pose.position.z = 0
 
-    [qx, qy, qz, qw] = euler_to_quat(0, 0, AGV.yaw)
+    [qx, qy, qz, qw] = euler_to_quat(0, 0, np.deg2rad(AGV.yaw))
     marker_car.pose.orientation.x = qx
     marker_car.pose.orientation.y = qy
     marker_car.pose.orientation.z = qz
@@ -323,6 +345,32 @@ def update_marker_car():
     marker_car.color.g = green_
 
     return marker_car
+
+
+def update_marker_direction():
+    marker_direction = Marker()
+    marker_direction.header.frame_id = "/map"
+    marker_direction.type = marker_direction.ARROW
+    marker_direction.action = marker_direction.ADD
+
+    marker_direction.pose.position.x = AGV.x
+    marker_direction.pose.position.y = AGV.y
+    marker_direction.pose.position.z = 0
+
+    [qx, qy, qz, qw] = euler_to_quat(0, 0, AGV.steering_angle)
+    marker_direction.pose.orientation.x = qx
+    marker_direction.pose.orientation.y = qy
+    marker_direction.pose.orientation.z = qz
+    marker_direction.pose.orientation.w = qw
+
+    marker_direction.scale.x = 0.5
+    marker_direction.scale.y = 0.03
+    marker_direction.scale.z = 0.01
+    marker_direction.color.a = 1
+    blue_ = 255
+    marker_direction.color.b = blue_
+
+    return marker_direction
 
 
 if __name__ == '__main__':

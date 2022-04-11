@@ -38,10 +38,10 @@ class Person:
 class Map:
     initial_data = OccupancyGrid
     data = OccupancyGrid()
-    goal_x = 4  # 5
+    goal_x = 2  # 5
     goal_y = 1.8  # 1.8
     res = 0.01
-    path = np.zeros([2, 166])
+    path = np.zeros([2, 1000])
     p_x = 0
     p_y = 0
     score = 0
