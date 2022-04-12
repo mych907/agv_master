@@ -74,6 +74,6 @@ Run the following command to run the node:
 rosrun agv_master agv_node.py
 ```
 
-To visualize, open the configuration in the /rviz folder.
+To visualize, open the configuration in the rviz folder.
 
 
