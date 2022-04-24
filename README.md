@@ -4,6 +4,8 @@ ROS package for a Jetson Nano-based UGV (Jetracer).
 
 The package includes OccupancyGrid map, A* algorithm for path generation, a controller (Pure pursuit and Stanley), subscribers for Marvelmind indoor GPS systems, and publishers for communication with Jetracer.
 
+![agv_master](https://github.com/mych907/agv_master/blob/master/agv_master.gif?raw=true)
+
 # Prerequisites
 
 The AGV Master package requires ROS, a PC as ground control station, a prebuilt Jetracer, Marvelmind Indoor GPS, and an IMU.
