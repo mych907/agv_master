@@ -19,7 +19,7 @@ from sensor_msgs.msg import Imu
 from sensor_msgs.msg import PointCloud
 from visualization_msgs.msg import Marker
 from darknet_ros_msgs.msg import BoundingBoxes
-
+from collections import namedtuple
 from library_agv import AGV, Person, Map
 
 pub_map = rospy.Publisher('/map', OccupancyGrid, latch=True, queue_size=10)
@@ -154,10 +154,13 @@ def initialize_yaw():
     if rpy.orientation.x >= 0:
         AGV.yaw_offset = rpy.orientation.x
         print("Initialized Yaw with Offset")
-
     else:
-        print("IMU values inconsistent. Check IMU.")
-        rospy.signal_shutdown(" ")
+        AGV.yaw_offset = rpy.orientation.x
+        print("Initialized Yaw with Negative Offset")
+
+    # else:
+    #     print("IMU values inconsistent. Check IMU.")
+    #     rospy.signal_shutdown(" ")
 
 
 def callback_update_pos(pos):
@@ -174,12 +177,18 @@ def callback_update_pos(pos):
 
 
 def callback_update_yaw(rpy):
-    if rpy.orientation.x >= 0:
-        AGV.yaw = -(rpy.orientation.x - AGV.yaw_offset)
+
+    if AGV.yaw_offset > 0:
+        if rpy.orientation.x >= 0:
+            AGV.yaw = -(rpy.orientation.x - AGV.yaw_offset)
+        else:
+            AGV.yaw = -(rpy.orientation.x - AGV.yaw_offset + 360)
     else:
-        AGV.yaw = -(rpy.orientation.x - AGV.yaw_offset + 360)
-    # imu_vel_x = rpy.angular_velocity.x
-    # imu_vel_y = rpy.angular_velocity.y
+        if rpy.orientation.x <= 0:
+            AGV.yaw = -(rpy.orientation.x - AGV.yaw_offset)
+        else:
+            AGV.yaw = -(rpy.orientation.x - AGV.yaw_offset - 360)
+
 
 
 def callback_update_person_pos(detected):
@@ -233,7 +242,7 @@ def a_star(np_map):
 
 def pure_pursuit():
     res_ = 1 / Map.res
-    ld = 1.1 * 0.5 * res_  # [m]. Look ahead distance, 0.5s preview time
+    ld = 1.2 * 0.5 * res_  # [m]. Look ahead distance, 0.5s preview time
     wheel_base = 0.15 * res_
     yaw_ = np.deg2rad(AGV.yaw)
     path = Map.path
@@ -249,7 +258,17 @@ def pure_pursuit():
     Map.p_x = path[0, min_n]
     Map.p_y = path[1, min_n]
 
-    alpha = np.arctan(Map.p_y / Map.p_x) - yaw_
+    Map.p_x += 0.00000001
+
+    if Map.p_x > 0:
+        alpha = np.arctan(Map.p_y / Map.p_x) - yaw_
+    else:
+        if Map.p_y > 0:
+            alpha = -np.arctan(Map.p_y / Map.p_x) - yaw_ + np.pi
+        else:
+            alpha = np.arctan(Map.p_y / Map.p_x) - yaw_ - np.pi
+
+    # print(alpha)
     AGV.steering_angle = np.arctan(2 * wheel_base * np.sin(alpha) / ld)
 
 
@@ -271,19 +290,39 @@ def stanley():
             min_n = n
     delta1 = np.arctan((path[1, min_n+10] - path[1, min_n-5]) / (path[0, min_n+10] - path[0, min_n-5]))  # heading error
     delta2 = np.arctan(k*min_/(k_s + v))
-    AGV.steering_angle = delta1 + delta2
+    AGV.steering_angle = -(delta1 + delta2)
+
+
+# def update_goal():
+#     if Map.score > 24:
+#         rospy.signal_shutdown("Score = 24. End of experiment.")
+#     if (AGV.x - Map.goal_x)*(AGV.x - Map.goal_x) + (AGV.y - Map.goal_y)*(AGV.y - Map.goal_y) < 0.3:
+#         Map.score += 1
+#         print("Goal. Score = {}".format(Map.score))
+#
+#         Map.goal_x = np.random.randint(100, 500)/100
+#         Map.goal_y = np.random.randint(100, 300)/100
+#         print("New goal = {}, {}".format(Map.goal_x, Map.goal_y))
 
 
 def update_goal():
-    if Map.score > 5:
-        rospy.signal_shutdown("Score = 5. End of experiment.")
-    if (AGV.x - Map.goal_x)*(AGV.x - Map.goal_x) + (AGV.y - Map.goal_y)*(AGV.y - Map.goal_y) < 0.3:
-        Map.score += 1
-        print("Goal. Score = {}".format(Map.score))
+    buff = np.transpose(np.array([[1, 0.9],[2.5,0.5],[4,0.5],[5,0.9],[5,2.7],[4,3.1],[2.5,3.1],[1,2.7]]))
+    # buff = np.array([[3.3, 2.3, 2, 3],
+    #                  [1.8, 1.5, 1.1, 0.8]])
+    # buff = np.array([[2, 3, 5],
+    #                  [2.2, 1, 2]])
 
-        Map.goal_x = np.random.randint(100, 500)/100
-        Map.goal_y = np.random.randint(100, 300)/100
+    if not Map.score:
+        Map.goal_x = buff[0, Map.score]
+        Map.goal_y = buff[1, Map.score]
+    if Map.score > 8:
+        rospy.signal_shutdown("Laps complete. End of experiment.")
+    if (AGV.x - Map.goal_x)*(AGV.x - Map.goal_x) + (AGV.y - Map.goal_y)*(AGV.y - Map.goal_y) < 0.1:
+        Map.goal_x = buff[0, Map.score]
+        Map.goal_y = buff[1, Map.score]
         print("New goal = {}, {}".format(Map.goal_x, Map.goal_y))
+
+        Map.score = Map.score + 1
 
 
 def euler_to_quat(roll, pitch, yaw):
@@ -357,7 +396,7 @@ def update_marker_direction():
     marker_direction.pose.position.y = AGV.y
     marker_direction.pose.position.z = 0
 
-    [qx, qy, qz, qw] = euler_to_quat(0, 0, AGV.steering_angle)
+    [qx, qy, qz, qw] = euler_to_quat(0, 0, AGV.steering_angle + np.deg2rad(AGV.yaw))
     marker_direction.pose.orientation.x = qx
     marker_direction.pose.orientation.y = qy
     marker_direction.pose.orientation.z = qz
