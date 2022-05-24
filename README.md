@@ -2,7 +2,7 @@
 
 ROS package for a Jetson Nano-based UGV (Jetracer).
 
-The package includes OccupancyGrid map, A* algorithm for path generation, a controller (Pure pursuit and Stanley), subscribers for Marvelmind indoor GPS systems, and publishers for communication with Jetracer.
+The package includes OccupancyGrid map, A* algorithm for path generation, controller (Pure pursuit and Stanley), subscribers for Marvelmind indoor GPS systems, and publishers for communication with Jetracer.
 
 ![agv_master](https://github.com/mych907/agv_master/blob/main/agv_master.gif?raw=true)
 
