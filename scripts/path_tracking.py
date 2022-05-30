@@ -9,11 +9,13 @@ def pure_pursuit():
     res_ = 1 / Map.res
     ld = 1.2 * 0.5 * res_  # [m]. Look ahead distance, 0.5s preview time
     wheel_base = 0.15 * res_
+    
     yaw_ = np.deg2rad(AGV.yaw)
     path = Map.path
     rear_center = [-wheel_base / 2 * np.cos(yaw_), -wheel_base / 2 * np.sin(yaw_)]
     min_ = 1000000
     min_n = 0
+    
     for n in range(100):
         buffer = np.sqrt(np.square(rear_center[0] - path[0, n]) + np.square(rear_center[1] - path[1, n]))
         if abs(buffer - ld) < min_:
@@ -22,7 +24,6 @@ def pure_pursuit():
 
     Map.p_x = path[0, min_n]
     Map.p_y = path[1, min_n]
-
     Map.p_x += 0.00000001
 
     if Map.p_x > 0:
@@ -33,7 +34,6 @@ def pure_pursuit():
         else:
             alpha = np.arctan(Map.p_y / Map.p_x) - yaw_ - np.pi
 
-    # print(alpha)
     AGV.steering_angle = np.arctan(2 * wheel_base * np.sin(alpha) / ld)
 
 
