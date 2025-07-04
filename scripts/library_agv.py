@@ -1,6 +1,7 @@
 import rospy
 import time
 import sys
+import os
 import numpy as np
 import copy
 
@@ -125,3 +126,38 @@ def euler_to_quat(roll, pitch, yaw):
     qw = np.cos(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.sin(pitch / 2) * np.sin(yaw / 2)
 
     return [qx, qy, qz, qw]
+
+
+def configure_agv(**kwargs):
+    """Update AGV attributes at runtime."""
+    for key, value in kwargs.items():
+        if hasattr(AGV, key):
+            setattr(AGV, key, value)
+
+
+def configure_person(**kwargs):
+    """Update Person attributes at runtime."""
+    for key, value in kwargs.items():
+        if hasattr(Person, key):
+            setattr(Person, key, value)
+
+
+def configure_map(**kwargs):
+    """Update Map attributes at runtime."""
+    for key, value in kwargs.items():
+        if hasattr(Map, key):
+            setattr(Map, key, value)
+
+
+def init_from_env():
+    """Configure AGV and Person from environment variables if set."""
+    configure_agv(
+        x=float(os.getenv("AGV_INITIAL_X", AGV.x)),
+        y=float(os.getenv("AGV_INITIAL_Y", AGV.y)),
+        yaw=float(os.getenv("AGV_INITIAL_YAW", AGV.yaw)),
+    )
+    configure_person(
+        x=float(os.getenv("PERSON_INITIAL_X", Person.x)),
+        y=float(os.getenv("PERSON_INITIAL_Y", Person.y)),
+    )
+
