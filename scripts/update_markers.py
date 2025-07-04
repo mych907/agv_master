@@ -16,7 +16,7 @@ def update_marker_goal():
     marker_goal.pose.position.z = 0
 
     [qx, qy, qz, qw] = euler_to_quat(0, 0, 0)
-    marker_goal.pose.orientation.x = qz
+    marker_goal.pose.orientation.x = qx
     marker_goal.pose.orientation.y = qy
     marker_goal.pose.orientation.z = qz
     marker_goal.pose.orientation.w = qw
