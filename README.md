@@ -78,4 +78,21 @@ rosrun agv_master agv_node.py
 
 To visualize, open the configuration in the rviz folder.
 
+## Configuring initial positions
+
+The library now exposes helper functions to configure the AGV and detected
+person at runtime. This removes the hard coded starting positions found in the
+original scripts.
+
+```python
+from scripts import library_agv
+
+# Example custom initialization
+library_agv.configure_agv(x=1.0, y=2.0, yaw=90)
+library_agv.configure_person(x=3.0, y=1.0)
+
+# Environment variables `AGV_INITIAL_X` and `PERSON_INITIAL_X` will also be
+# consumed if present when calling `library_agv.init_from_env()`.
+```
+
 

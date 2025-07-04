@@ -61,3 +61,13 @@ def test_euler_to_quat_zero():
     quat = lib.euler_to_quat(0, 0, 0)
     assert np.allclose(quat, [0, 0, 0, 1])
 
+
+def test_configure_functions():
+    lib = import_library_agv()
+    lib.configure_agv(x=1.5, y=2.5)
+    lib.configure_person(x=3.5, y=4.5)
+    assert lib.AGV.x == 1.5
+    assert lib.AGV.y == 2.5
+    assert lib.Person.x == 3.5
+    assert lib.Person.y == 4.5
+
