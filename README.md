@@ -49,7 +49,7 @@ Don't forget to source your bashrc.
 
 ## 3. Marvelmind Indoor GPS (Or any other equivalent localization tool)
 
-This package depends on an unltrasonic indoor GPS system developed by Marvelmind Robotics. Use of any other localization such as visual tracking, odometry or even SLAM can be added to replace this. In case you have the Marvelmind beacons, follow the instructions below.
+This package depends on an ultrasonic indoor GPS system developed by Marvelmind Robotics. Use of any other localization such as visual tracking, odometry or even SLAM can be added to replace this. In case you have the Marvelmind beacons, follow the instructions below.
 
 The ultrasonic GPS system from Marvelmind provides a ROS package from link. Clone the repo for your ROS distro version. (https://github.com/MarvelmindRobotics/marvelmind_nav-release)
 
